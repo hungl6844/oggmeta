@@ -4,7 +4,7 @@ use std::{
     io::{Cursor, Read, Seek},
 };
 
-pub fn get_comments<T>(reader: &mut T) -> Result<HashMap<String, Vec<String>>, crate::Error>
+pub fn parse_file<T>(reader: &mut T) -> Result<(String, HashMap<String, Vec<String>>), crate::Error>
 where
     T: Read + Seek,
 {
@@ -20,9 +20,9 @@ where
 
                 if packet_data[0..7] == [3, 118, 111, 114, 98, 105, 115] {
                     println!("{packet_data:?}");
-                    let comments = parse_vorbis(&mut Cursor::new(&mut packet_data))?;
+                    let (vendor, comments) = parse_vorbis(&mut Cursor::new(&mut packet_data))?;
                     println!("{:?}", &comments);
-                    return Ok(comments);
+                    return Ok((vendor, comments));
                 }
             }
             return Err(crate::Error::NoComments);
@@ -30,7 +30,7 @@ where
     }
 }
 
-pub fn parse_vorbis<T>(vorbis: &mut T) -> Result<HashMap<String, Vec<String>>, crate::Error>
+pub fn parse_vorbis<T>(vorbis: &mut T) -> Result<(String, HashMap<String, Vec<String>>), crate::Error>
 where
     T: Read + Seek,
 {
@@ -39,7 +39,9 @@ where
     vorbis.seek(std::io::SeekFrom::Start(7))?;
     let vendor_length = read_u32(vorbis)?;
     println!("{}", vendor_length);
-    vorbis.seek(std::io::SeekFrom::Current(vendor_length.into()))?;
+    let mut vendor_bytes = vec![0_u8; vendor_length.try_into()?];
+    vorbis.read_exact(&mut vendor_bytes)?;
+    let vendor_string = String::from_utf8(vendor_bytes)?;
     let list_length = read_u32(vorbis)?;
 
     for _x in 0..list_length {
@@ -55,7 +57,7 @@ where
             .push(split_comment.next().ok_or(crate::Error::NoComments)?.into());
     }
 
-    Ok(comments)
+    Ok((vendor_string, comments))
 }
 
 fn read_u8<T>(read: &mut T) -> Result<u8, crate::Error>

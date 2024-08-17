@@ -1,4 +1,9 @@
 use thiserror::Error;
+use std::collections::HashMap;
+use std::io::{Seek, Read};
+use std::path::Path;
+use std::fs::File;
+use std::convert::AsRef;
 
 mod ogg;
 
@@ -15,14 +20,25 @@ pub enum Error {
     InvalidLength(#[from] std::num::TryFromIntError),
 }
 
-#[cfg(test)]
-mod tests {
-    use crate::ogg;
-    use std::fs::File;
+#[derive(Debug)]
+pub struct Tag {
+    vendor: String,
+    comments: HashMap<String, Vec<String>>
+}
 
-    #[test]
-    fn it_works() {
-        let mut ogg = File::open("audio.ogg").unwrap();
-        ogg::get_comments(&mut ogg).unwrap();
+impl Tag {
+    pub fn read_from<R: Read + Seek> (read: &mut R) -> Result<Tag, Error> {
+        let (vendor, comments) = ogg::parse_file(read)?;
+
+        Ok(Tag {vendor, comments})
     }
+
+    pub fn read_from_path<P: AsRef<Path>> (path: &P) -> Result<Tag, Error> {
+        let mut file = File::open(path)?;
+        let (vendor, comments) = ogg::parse_file(&mut file)?;
+
+        Ok(Tag {vendor, comments})
+    }
+
+    pub fn get_vendor(&self) -> String { self.vendor.clone() }
 }
