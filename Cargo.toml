@@ -2,6 +2,10 @@
 name = "oggmeta"
 version = "0.1.0"
 edition = "2021"
+description = "A crate for reader (and soon writing) ogg metada"
+lisence = "MIT"
+repository = "https://gitub.com/hungl6844/oggmeta"
+readme = "README.md"
 
 [dependencies]
 ogg = "0.9.1"

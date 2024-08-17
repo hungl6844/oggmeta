@@ -30,7 +30,9 @@ where
     }
 }
 
-pub fn parse_vorbis<T>(vorbis: &mut T) -> Result<(String, HashMap<String, Vec<String>>), crate::Error>
+pub fn parse_vorbis<T>(
+    vorbis: &mut T,
+) -> Result<(String, HashMap<String, Vec<String>>), crate::Error>
 where
     T: Read + Seek,
 {
@@ -58,15 +60,6 @@ where
     }
 
     Ok((vendor_string, comments))
-}
-
-fn read_u8<T>(read: &mut T) -> Result<u8, crate::Error>
-where
-    T: Read,
-{
-    let mut buf = [0_u8; 1];
-    read.read_exact(&mut buf)?;
-    Ok(buf[0])
 }
 
 fn read_u32<T>(read: &mut T) -> Result<u32, crate::Error>
