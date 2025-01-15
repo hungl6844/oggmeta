@@ -9,4 +9,4 @@ readme = "README.md"
 
 [dependencies]
 ogg = "0.9.1"
-thiserror = "1.0.63"
+thiserror = "2.0.0"
