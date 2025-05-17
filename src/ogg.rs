@@ -19,9 +19,7 @@ where
                 // 3 is the packet type (mesage header) and the other 6 bytes spell "vorbis" in utf8
 
                 if packet_data[0..7] == [3, 118, 111, 114, 98, 105, 115] {
-                    println!("{packet_data:?}");
                     let (vendor, comments) = parse_vorbis(&mut Cursor::new(&mut packet_data))?;
-                    println!("{:?}", &comments);
                     return Ok((vendor, comments));
                 }
             }
@@ -40,7 +38,6 @@ where
 
     vorbis.seek(std::io::SeekFrom::Start(7))?;
     let vendor_length = read_u32(vorbis)?;
-    println!("{}", vendor_length);
     let mut vendor_bytes = vec![0_u8; vendor_length.try_into()?];
     vorbis.read_exact(&mut vendor_bytes)?;
     let vendor_string = String::from_utf8(vendor_bytes)?;
