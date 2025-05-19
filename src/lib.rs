@@ -18,8 +18,8 @@ mod ogg;
 #[non_exhaustive]
 pub enum Error {
     /// no comment packet was found in the file. this suggests the ogg file is malformed or
-    /// uses a codec besides vorbis.
-    #[error("No vorbis comment packet found. oggmeta only supports vorbis")]
+    /// uses a codec besides vorbis/theora.
+    #[error("No vorbis or theora comment packet found. oggmeta only supports vorbis and theora comments")]
     NoComments,
     /// wrapper around [`std::io::Error`]. generally caused by problems reading the file.
     #[error("{0}")]
@@ -32,6 +32,17 @@ pub enum Error {
     /// the file are unvalid [`u32`]s
     #[error("{0}")]
     InvalidLength(#[from] std::num::TryFromIntError),
+    /// there was some error while reading the ogg file. this generally suggests
+    /// some kind of error with libogg, libtheora, or theorafile.
+    #[error("there was an error parsing the ogg file.")]
+    ParseError,
+    /// wrapper around [`std::ffi::NulError`]
+    /// this means something in theorafile returned null.
+    #[error("{0}")]
+    NullError(#[from] std::ffi::NulError),
+    /// wrapper around [`image::error::ImageError`]
+    #[error("{0}")]
+    ImageError(#[from] image::error::ImageError),
 }
 
 /// A struct that contains all the available metadata in the file.
