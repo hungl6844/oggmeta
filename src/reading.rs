@@ -20,12 +20,12 @@ struct DataSource {
 }
 
 impl DataSource {
-    pub fn new(data: Vec<u8>) -> Self {
+    pub(crate) fn new(data: Vec<u8>) -> Self {
         Self { data, pos: 0 }
     }
 
     // Implement a method to seek to a specific position
-    pub fn seek(
+    pub(crate) fn seek(
         &mut self,
         offset: ogg_int64_t,
         origin: ::std::os::raw::c_int,
@@ -44,7 +44,12 @@ impl DataSource {
     }
 
     // Implement a method to read data from the current position
-    pub fn read(&mut self, ptr: *mut ::std::os::raw::c_void, size: usize, nmemb: usize) -> usize {
+    pub(crate) fn read(
+        &mut self,
+        ptr: *mut ::std::os::raw::c_void,
+        size: usize,
+        nmemb: usize,
+    ) -> usize {
         let bytes_to_read = size * nmemb;
         let remaining_data = &self.data[self.pos..];
         let bytes_read = std::cmp::min(remaining_data.len(), bytes_to_read);
@@ -56,7 +61,7 @@ impl DataSource {
     }
 
     // Implement a method to close the data source
-    pub fn close(&mut self) -> ::std::os::raw::c_int {
+    pub(crate) fn close(&mut self) -> ::std::os::raw::c_int {
         // Optionally perform any cleanup here
         0 // Success
     }
@@ -224,44 +229,40 @@ where
 {
     let mut packet_reader = PacketReader::new(reader);
 
-    loop {
-        if let Ok(o) = packet_reader.read_packet() {
-            if let Some(p) = o {
-                let mut packet_data = p.data;
+    while let Some(p) = packet_reader.read_packet()? {
+        let mut packet_data = p.data;
 
-                // 3 is the packet type (mesage header) and the other 6 bytes spell "vorbis" in utf8
+        // 3 is the packet type (mesage header) and the other 6 bytes spell "vorbis" in utf8
 
-                if packet_data[0..7] == [3, 118, 111, 114, 98, 105, 115] {
-                    let mut vorbis = Cursor::new(&mut packet_data);
-                    let mut comments: HashMap<String, Vec<String>> = HashMap::new();
+        if packet_data.len() >= 7 && packet_data[0..7] == [3, 118, 111, 114, 98, 105, 115] {
+            let mut vorbis = Cursor::new(&mut packet_data);
+            let mut comments: HashMap<String, Vec<String>> = HashMap::new();
 
-                    vorbis.seek(std::io::SeekFrom::Start(7))?;
-                    let vendor_length = read_u32(&mut vorbis)?;
-                    let mut vendor_bytes = vec![0_u8; vendor_length.try_into()?];
-                    vorbis.read_exact(&mut vendor_bytes)?;
-                    let vendor_string = String::from_utf8(vendor_bytes)?;
-                    let list_length = read_u32(&mut vorbis)?;
+            vorbis.seek(std::io::SeekFrom::Start(7))?;
+            let vendor_length = read_u32(&mut vorbis)?;
+            let mut vendor_bytes = vec![0_u8; vendor_length.try_into()?];
+            vorbis.read_exact(&mut vendor_bytes)?;
+            let vendor_string = String::from_utf8(vendor_bytes)?;
+            let list_length = read_u32(&mut vorbis)?;
 
-                    for _x in 0..list_length {
-                        let length = read_u32(&mut vorbis)?;
-                        let mut comment_bytes = vec![0_u8; length.try_into()?];
-                        vorbis.read_exact(&mut comment_bytes)?;
-                        let comment = String::from_utf8(comment_bytes)?;
+            for _x in 0..list_length {
+                let length = read_u32(&mut vorbis)?;
+                let mut comment_bytes = vec![0_u8; length.try_into()?];
+                vorbis.read_exact(&mut comment_bytes)?;
+                let comment = String::from_utf8(comment_bytes)?;
 
-                        let mut split_comment = comment.split("=");
-                        comments
-                            .entry(split_comment.next().ok_or(crate::Error::NoComments)?.into())
-                            .or_default()
-                            .push(split_comment.next().ok_or(crate::Error::NoComments)?.into());
-                    }
-
-                    return Ok((vendor_string, comments));
-                }
-            } else {
-                return Ok(("".to_string(), HashMap::new()));
+                let mut split_comment = comment.split("=");
+                comments
+                    .entry(split_comment.next().ok_or(crate::Error::NoComments)?.into())
+                    .or_default()
+                    .push(split_comment.next().ok_or(crate::Error::NoComments)?.into());
             }
+
+            return Ok((vendor_string, comments));
         }
     }
+
+    Ok(("".to_string(), HashMap::new()))
 }
 
 fn read_u32<T>(read: &mut T) -> Result<u32, crate::Error>
