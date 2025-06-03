@@ -1,4 +1,9 @@
 # oggmeta
+
+[![Rust](https://github.com/hungl6844/oggmeta/actions/workflows/rust.yml/badge.svg)](https://github.com/hungl6844/oggmeta/actions/workflows/rust.yml)
+[![crates.io](https://img.shields.io/crates/v/oggmeta?label=latest)](https://crates.io/crates/oggmeta)
+[![docs](https://docs.rs/oggmeta/badge.svg)](https://docs.rs/oggmeta/)
+
 oggmeta is a crate that reads `.ogg` files and decodes the vorbis comments contained within.
 ### Features
 oggmeta can read vorbis comments and theora comments, store any tags contained within, including album art.
