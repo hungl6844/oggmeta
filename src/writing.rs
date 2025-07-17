@@ -1,34 +1,43 @@
-use std::io::{Cursor, Read, Seek, Write};
+use std::io::{Read, Seek, Write};
 
 use ogg::{PacketReader, PacketWriteEndInfo, PacketWriter};
 
-use crate::Tag;
+use crate::{Tag, THEORA_HEADER, VORBIS_HEADER};
 
-pub(crate) fn insert_comments<W: Write + Seek + Read>(
-    rw: &mut W,
+pub(crate) fn insert_comments<W: Write, R: Read + Seek>(
+    read: &mut R,
+    write: &mut W,
     tags: &Tag,
-) -> Result<u64, crate::Error> {
-    let pos = rw.seek(std::io::SeekFrom::Current(0))?;
-    let mut buf = vec![];
-    rw.read_to_end(&mut buf)?;
-    rw.seek(std::io::SeekFrom::Start(pos))?;
+) -> Result<(), crate::Error> {
+    let pos = read.stream_position()?;
 
-    let mut packet_reader = PacketReader::new(Cursor::new(buf));
-    let mut packet_writer = PacketWriter::new(&mut *rw);
+    let mut packet_reader = PacketReader::new(&mut *read);
+    let mut packet_writer = PacketWriter::new(write);
 
     while let Some(p) = packet_reader.read_packet()? {
         let stream_serial = p.stream_serial();
         let last_in_page = p.last_in_page();
         let last_in_stream = p.last_in_stream();
         let absgp = p.absgp_page();
-        let mut packet_data = vec![];
+        let mut packet_data: Vec<u8>;
 
-        // for the first, 3 is the packet type (mesage header) and the other 6 bytes spell "vorbis" in utf8
-        // in the second,  the first byte specifies the message header, and the other 6 spell out "theora"
-        if p.data.len() >= 7
-            && (p.data[0..7] == [3, 118, 111, 114, 98, 105, 115])
-                /*|| p.data[0..7] == [0x81, 0x74, 0x68, 0x65, 0x6F, 0x72, 0x61])*/
-        {
+        let is_vorbis = if p.data.len() >= 7 {
+            p.data[0..7] == VORBIS_HEADER
+        } else {
+            false
+        };
+        let is_theora = if p.data.len() >= 7 {
+            p.data[0..7] == THEORA_HEADER
+        } else {
+            false
+        };
+
+        if is_theora || is_vorbis {
+            packet_data = if is_vorbis {
+                VORBIS_HEADER.to_vec()
+            } else {
+                THEORA_HEADER.to_vec()
+            };
             write_u32(&mut packet_data, tags.vendor.len() as u32)?;
             packet_data.write_all(tags.vendor.as_bytes())?;
             write_u32(&mut packet_data, tags.comments.len() as u32)?;
@@ -41,7 +50,10 @@ pub(crate) fn insert_comments<W: Write + Seek + Read>(
                 }
             }
 
-            packet_data.write_all(&[1_u8])?;
+            // this is the vorbis framing bit. not implemented in theora.
+            if is_vorbis {
+                packet_data.write_all(&[1_u8])?
+            };
         } else {
             packet_data = p.data;
         }
@@ -60,7 +72,9 @@ pub(crate) fn insert_comments<W: Write + Seek + Read>(
         )?;
     }
 
-    Ok(rw.seek(std::io::SeekFrom::Current(0))?)
+    read.seek(std::io::SeekFrom::Start(pos))?;
+
+    Ok(())
 }
 
 fn write_u32<W: Write>(writer: &mut W, i: u32) -> Result<(), crate::Error> {

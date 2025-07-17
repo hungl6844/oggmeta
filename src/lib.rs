@@ -1,16 +1,17 @@
-//! `oggmeta` is a crate for reading (and soon writing) audio metadata for ogg vorbis files
+//! `oggmeta` is a crate for reading and writing audio metadata for ogg vorbis files
 
-use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::convert::AsRef;
 use std::fs::File;
-use std::hash::Hash;
 use std::io::{Read, Seek, Write};
 use std::path::Path;
 use thiserror::Error;
 
 mod reading;
 mod writing;
+
+const VORBIS_HEADER: [u8; 7] = [3, 118, 111, 114, 98, 105, 115];
+const THEORA_HEADER: [u8; 7] = [0x81, 0x74, 0x68, 0x65, 0x6F, 0x72, 0x61];
 
 /// Error type.
 ///
@@ -86,23 +87,35 @@ impl Tag {
 
     /// takes a [`Read`] and a [`Write`], copies the packets over.
     /// edits the vorbis comment header only.
-    /// returns writer position from start of stream.<br>
-    /// **WARNING: you MUST truncate the file at the position just in case the file is shorter.**
-    pub fn write_to<W: Read + Write + Seek>(&self, rw: &mut W) -> Result<u64, crate::Error> {
-        Ok(crate::writing::insert_comments(rw, &self)?)
+    pub fn write_to<W: Write, R: Read + Seek>(
+        &self,
+        read: &mut R,
+        write: &mut W,
+    ) -> Result<(), crate::Error> {
+        crate::writing::insert_comments(read, write, self)
     }
 
     /// does the same thing as [`Tag::write_to`], but takes a path instead.<br>
-    /// **assumes that the path is an existing ogg file!!**
-    pub fn write_to_path<P: AsRef<Path>>(&self, path: &P) -> Result<(), crate::Error> {
-        let mut file = File::options()
+    /// at some point i can consider deleting the previous file... keeping it for debug purposes.
+    pub fn write_to_path<P: AsRef<Path>>(
+        &self,
+        read_from: &P,
+        write_from: &P,
+    ) -> Result<(), crate::Error> {
+        let mut read = File::options()
+            .read(true)
+            .write(false)
+            .create(false)
+            .open(read_from)?;
+
+        let mut write = File::options()
             .read(true)
             .write(true)
-            .create(false)
-            .open(path)?;
+            .create(true)
+            .truncate(true)
+            .open(write_from)?;
 
-        let pos = self.write_to(&mut file)?;
-        file.set_len(pos)?;
+        self.write_to(&mut read, &mut write)?;
 
         Ok(())
     }
