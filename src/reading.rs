@@ -10,7 +10,9 @@ use theorafile_rs::{
     tf_videoinfo, th_pixel_fmt, th_pixel_fmt_TH_PF_444, OggTheora_File,
 };
 
-// this entire block for the DataSource struct (and most of my code for reading the file)
+
+
+// this entire block for the DataSource struct (and most of my code for reading theora)
 // is taken pretty much completely from `https://github.com/xmoezzz/omvdecoder`,
 // this guy is the only example I could find of someone using the theorafile bindings,
 // and he's also the person who made them. this guy actually saved my sanity.
@@ -108,7 +110,7 @@ pub(crate) fn parse_file<T>(
 where
     T: Read + Seek,
 {
-    let (vendor, mut tags) = parse_vorbis(reader)?;
+    let (vendor, mut tags) = parse_headers(reader)?;
     reader.rewind()?;
 
     let tf_cbs = tf_callbacks {
@@ -119,7 +121,7 @@ where
 
     let mut ogg_data = vec![];
     reader.read_to_end(&mut ogg_data)?;
-    let datasource = DataSource::new(ogg_data.clone());
+    let mut datasource = DataSource::new(ogg_data);
 
     let layout = Layout::new::<OggTheora_File>();
     let ogg = unsafe { std::alloc::alloc(layout) };
@@ -177,7 +179,7 @@ where
         if unsafe { tf_eos(ogg_file) } == 0 {
             // if this doesn't return 0, theres... no video? even though we've established there is a video.
             // better safe than sorry, i guess.
-            unsafe { tf_readvideo(ogg_file, data_blob as *mut i8, 1) };
+            unsafe { tf_readvideo(ogg_file, data_blob, 1) };
 
             // need some kind of error checking here.
             // we can't run an unsafe function and just assume there's some data on the other side of the pointer.
@@ -217,13 +219,26 @@ where
                         + &BASE64_STANDARD.encode(img_buf.get_ref()),
                 ],
             );
+
+            unsafe {
+                tf_close(ogg_file);
+
+                if !ogg.is_null() {
+                    std::alloc::dealloc(ogg, layout);
+                }
+                if !data_blob.is_null() {
+                    std::alloc::dealloc(data_blob, mem_layout);
+                }
+
+                datasource.close();
+            }
         }
     }
 
     Ok((vendor, tags))
 }
 
-fn parse_vorbis<T>(reader: &mut T) -> Result<(String, HashMap<String, Vec<String>>), crate::Error>
+fn parse_headers<T>(reader: &mut T) -> Result<(String, HashMap<String, Vec<String>>), crate::Error>
 where
     T: Read + Seek,
 {
