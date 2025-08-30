@@ -10,8 +10,6 @@ use theorafile_rs::{
     tf_videoinfo, th_pixel_fmt, th_pixel_fmt_TH_PF_444, OggTheora_File,
 };
 
-
-
 // this entire block for the DataSource struct (and most of my code for reading theora)
 // is taken pretty much completely from `https://github.com/xmoezzz/omvdecoder`,
 // this guy is the only example I could find of someone using the theorafile bindings,
@@ -244,37 +242,44 @@ where
 {
     let mut packet_reader = PacketReader::new(reader);
 
-    while let Some(p) = packet_reader.read_packet()? {
-        let mut packet_data = p.data;
+    println!("reached!");
 
-        // 3 is the packet type (mesage header) and the other 6 bytes spell "vorbis" in utf8
+    if let Ok(mut r) = packet_reader.read_packet() {
+        while let Some(ref mut p) = r {
+            println!("loop!");
 
-        if packet_data.len() >= 7 && packet_data[0..7] == [3, 118, 111, 114, 98, 105, 115] {
-            let mut vorbis = Cursor::new(&mut packet_data);
-            let mut comments: HashMap<String, Vec<String>> = HashMap::new();
+            // 3 is the packet type (mesage header) and the other 6 bytes spell "vorbis" in utf8
 
-            vorbis.seek(std::io::SeekFrom::Start(7))?;
-            let vendor_length = read_u32(&mut vorbis)?;
-            let mut vendor_bytes = vec![0_u8; vendor_length.try_into()?];
-            vorbis.read_exact(&mut vendor_bytes)?;
-            let vendor_string = String::from_utf8(vendor_bytes)?;
-            let list_length = read_u32(&mut vorbis)?;
+            if p.data.len() >= 7 && p.data[0..7] == [3, 118, 111, 114, 98, 105, 115] {
+                let mut vorbis = Cursor::new(&mut p.data);
+                let mut comments: HashMap<String, Vec<String>> = HashMap::new();
 
-            for _x in 0..list_length {
-                let length = read_u32(&mut vorbis)?;
-                let mut comment_bytes = vec![0_u8; length.try_into()?];
-                vorbis.read_exact(&mut comment_bytes)?;
-                let comment = String::from_utf8(comment_bytes)?;
+                vorbis.seek(std::io::SeekFrom::Start(7))?;
+                let vendor_length = read_u32(&mut vorbis)?;
+                let mut vendor_bytes = vec![0_u8; vendor_length.try_into()?];
+                vorbis.read_exact(&mut vendor_bytes)?;
+                let vendor_string = String::from_utf8(vendor_bytes)?;
+                let list_length = read_u32(&mut vorbis)?;
 
-                let mut split_comment = comment.split("=");
-                comments
-                    .entry(split_comment.next().ok_or(crate::Error::NoComments)?.into())
-                    .or_default()
-                    .push(split_comment.next().ok_or(crate::Error::NoComments)?.into());
+                for _x in 0..list_length {
+                    let length = read_u32(&mut vorbis)?;
+                    let mut comment_bytes = vec![0_u8; length.try_into()?];
+                    vorbis.read_exact(&mut comment_bytes)?;
+                    let comment = String::from_utf8(comment_bytes)?;
+
+                    let mut split_comment = comment.split("=");
+                    comments
+                        .entry(split_comment.next().ok_or(crate::Error::NoComments)?.into())
+                        .or_default()
+                        .push(split_comment.next().ok_or(crate::Error::NoComments)?.into());
+                }
+
+                return Ok((vendor_string, comments));
             }
-
-            return Ok((vendor_string, comments));
         }
+
+        // the packet reader failed. generally means the file is not a valid ogg file.
+        return Err(crate::Error::NoComments);
     }
 
     Ok(("".to_string(), HashMap::new()))

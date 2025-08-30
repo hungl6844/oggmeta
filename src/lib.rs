@@ -21,7 +21,7 @@ const THEORA_HEADER: [u8; 7] = [0x81, 0x74, 0x68, 0x65, 0x6F, 0x72, 0x61];
 pub enum Error {
     /// no comment packet was found in the file. this suggests the ogg file is malformed or
     /// uses a codec besides vorbis/theora.
-    #[error("No vorbis or theora comment packet found. oggmeta only supports vorbis and theora comments")]
+    #[error("No vorbis or theora comment packet found. oggmeta only supports vorbis and theora comments. your file may be malformed.")]
     NoComments,
     /// wrapper around [`std::io::Error`]. generally caused by problems reading the file.
     #[error("{0}")]
@@ -36,7 +36,7 @@ pub enum Error {
     InvalidLength(#[from] std::num::TryFromIntError),
     /// there was some error while reading the ogg file. this generally suggests
     /// some kind of error with libogg, libtheora, or theorafile.
-    #[error("there was an error parsing the ogg file.")]
+    #[error("there was an error parsing the ogg file. your file is most likely malformed.")]
     ParseError,
     /// wrapper around [`std::ffi::NulError`]
     /// this means something in theorafile returned null.
