@@ -3,11 +3,11 @@ use ogg::PacketReader;
 use std::{
     alloc::Layout,
     collections::HashMap,
+    ffi::{c_char, CStr},
     io::{Cursor, Read, Seek},
 };
 use theorafile_rs::{
-    ogg_int64_t, tf_callbacks, tf_close, tf_eos, tf_hasvideo, tf_open_callbacks, tf_readvideo,
-    tf_videoinfo, th_pixel_fmt, th_pixel_fmt_TH_PF_444, OggTheora_File,
+    ogg_int64_t, tf_callbacks, tf_close, tf_eos, tf_hasvideo, tf_open_callbacks, tf_readvideo, tf_videoinfo, th_comment, th_pixel_fmt, th_pixel_fmt_TH_PF_444, vorbis_comment, OggTheora_File
 };
 
 // this entire block for the DataSource struct (and most of my code for reading theora)
@@ -108,7 +108,6 @@ pub(crate) fn parse_file<T>(
 where
     T: Read + Seek,
 {
-    let (vendor, mut tags) = parse_headers(reader)?;
     reader.rewind()?;
 
     let tf_cbs = tf_callbacks {
@@ -141,6 +140,8 @@ where
         }
         return Err(crate::Error::ParseError);
     }
+
+    let (vendor, mut tags) = unsafe { parse_tags(&mut *(*ogg_file).tcomment, &mut *(*ogg_file).vcomment)? };
 
     let has_video = unsafe { tf_hasvideo(ogg_file) };
 
@@ -177,7 +178,8 @@ where
         if unsafe { tf_eos(ogg_file) } == 0 {
             // if this doesn't return 0, theres... no video? even though we've established there is a video.
             // better safe than sorry, i guess.
-            unsafe { tf_readvideo(ogg_file, data_blob, 1) };
+
+            unsafe { tf_readvideo(ogg_file, data_blob as *mut c_char, 1) };
 
             // need some kind of error checking here.
             // we can't run an unsafe function and just assume there's some data on the other side of the pointer.
@@ -236,18 +238,10 @@ where
     Ok((vendor, tags))
 }
 
-fn parse_headers<T>(reader: &mut T) -> Result<(String, HashMap<String, Vec<String>>), crate::Error>
-where
-    T: Read + Seek,
-{
-    let mut packet_reader = PacketReader::new(reader);
+fn parse_tags(tcomment: &mut th_comment, vcomment: &mut vorbis_comment) -> Result<(String, HashMap<String, Vec<String>>), crate::Error> {
 
-    println!("reached!");
-
-    if let Ok(mut r) = packet_reader.read_packet() {
+    /*if let Ok(mut r) = packet_reader.read_packet() {
         while let Some(ref mut p) = r {
-            println!("loop!");
-
             // 3 is the packet type (mesage header) and the other 6 bytes spell "vorbis" in utf8
 
             if p.data.len() >= 7 && p.data[0..7] == [3, 118, 111, 114, 98, 105, 115] {
@@ -280,7 +274,11 @@ where
 
         // the packet reader failed. generally means the file is not a valid ogg file.
         return Err(crate::Error::NoComments);
-    }
+    }*/
+
+    let vendor = unsafe { tcomment.vendor };
+
+    unsafe { dbg!(CStr::from_ptr(vendor).to_str()).unwrap() };
 
     Ok(("".to_string(), HashMap::new()))
 }

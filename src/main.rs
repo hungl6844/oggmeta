@@ -1,7 +1,8 @@
 use oggmeta::Tag;
+use std::fs;
 
-fn main() {
-    let mut tags = Tag::read_from_path(&"Creep (Original).ogg").or_else(|e| => { dbg!(e) });
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let mut tags = Tag::read_from_path(&"Creep (Original).ogg")?;
 
     tags.comments.remove("COVERART");
 
@@ -12,4 +13,6 @@ fn main() {
 
     tags.write_to_path(&"Creep (Original).ogg", &"Creep.ogg")
         .unwrap();
+
+    Ok(())
 }
