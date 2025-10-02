@@ -11,10 +11,8 @@ oggmeta can read and write vorbis comments and theora comments within ogg files
 in case the album art is contained as a theora frame, using `theorafile`, oggmeta can read the first frame of
 video and store it as an album cover. 
 
-NOTE: that implementation is pretty much completely wrong. ffmpeg does this by default when converting from, for instance, an mp3, but covert art in an ogg file should _always_ be stored in
-`METADATA_BLOCK_IMAGE`. However, I don't want oggmeta to overwrite data in an ogg file (besides tags);
-oggmeta will keep the theora stream, but will exclusively write album covers to 
-`METADATA_BLOCK_IMAGE` tag.
+NOTE: that implementation (storing album covers as videos) is pretty much completely wrong; ffmpeg does this by default when converting from, for instance, an mp3, but covert art in an ogg file should _always_ be stored in a `METADATA_BLOCK_IMAGE`. oggmeta will exclusively write album covers to a `METADATA_BLOCK_IMAGE` tag, removing any video in the file
+> Please note that this mean oggmeta will destroy any ogv (video + audio) files passed to it that don't store video ONLY for the sake of album covers. This will be changed.
 
 ### Limitations
 regardless of how much video is in the file, oggmeta will always
