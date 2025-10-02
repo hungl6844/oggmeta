@@ -1,13 +1,16 @@
+use image::EncodableLayout;
+use ogg::{PacketReader, PacketWriteEndInfo, PacketWriter};
 use std::io::{Read, Seek, Write};
 
-use ogg::{PacketReader, PacketWriteEndInfo, PacketWriter};
-
-use crate::{Tag, THEORA_HEADER, VORBIS_HEADER};
+use crate::{
+    utils::{create_picture_block, write_u32},
+    Tag, THEORA_HEADER, VORBIS_HEADER,
+};
 
 pub(crate) fn insert_comments<W: Write, R: Read + Seek>(
     read: &mut R,
     write: &mut W,
-    tags: &Tag,
+    tags: &mut Tag,
 ) -> Result<(), crate::Error> {
     let pos = read.stream_position()?;
 
@@ -40,19 +43,30 @@ pub(crate) fn insert_comments<W: Write, R: Read + Seek>(
             };
             write_u32(&mut packet_data, tags.vendor.len() as u32)?;
             packet_data.write_all(tags.vendor.as_bytes())?;
-            write_u32(&mut packet_data, tags.comments.len() as u32)?;
+            write_u32(
+                &mut packet_data,
+                (if is_vorbis {
+                    tags.comments.len() + tags.pictures.len()
+                } else {
+                    tags.comments.len()
+                }) as u32,
+            )?;
 
-            for (key, values) in tags.comments.iter() {
-                for val in values {
-                    let out_string = key.to_string() + "=" + val;
-                    write_u32(&mut packet_data, out_string.len() as u32)?;
-                    packet_data.write_all(out_string.as_bytes())?;
-                }
+            for (key, val) in tags.comments.iter() {
+                let out_string = key.to_string() + "=" + val;
+                write_u32(&mut packet_data, out_string.len() as u32)?;
+                packet_data.write_all(out_string.as_bytes())?;
             }
 
-            // this is the vorbis framing bit. not implemented in theora.
             if is_vorbis {
-                packet_data.write_all(&[1_u8])?
+                for picture in &mut tags.pictures {
+                    let block = create_picture_block(picture)?;
+                    write_u32(&mut packet_data, (block.len()) as u32)?;
+                    packet_data.write_all(block.as_bytes())?;
+                }
+
+                // this is the vorbis framing bit. not implemented in theora.
+                packet_data.write_all(&[1_u8])?;
             };
         } else {
             packet_data = p.data;
@@ -61,10 +75,10 @@ pub(crate) fn insert_comments<W: Write, R: Read + Seek>(
         packet_writer.write_packet(
             packet_data,
             stream_serial,
-            if last_in_page {
-                PacketWriteEndInfo::EndPage
-            } else if last_in_stream {
+            if last_in_stream {
                 PacketWriteEndInfo::EndStream
+            } else if last_in_page {
+                PacketWriteEndInfo::EndPage
             } else {
                 PacketWriteEndInfo::NormalPacket
             },
@@ -73,12 +87,6 @@ pub(crate) fn insert_comments<W: Write, R: Read + Seek>(
     }
 
     read.seek(std::io::SeekFrom::Start(pos))?;
-
-    Ok(())
-}
-
-fn write_u32<W: Write>(writer: &mut W, i: u32) -> Result<(), crate::Error> {
-    writer.write_all(&i.to_le_bytes())?;
 
     Ok(())
 }

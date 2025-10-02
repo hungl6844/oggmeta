@@ -1,5 +1,3 @@
-use base64::{prelude::BASE64_STANDARD, Engine};
-use ogg::PacketReader;
 use std::{
     alloc::Layout,
     collections::HashMap,
@@ -7,8 +5,11 @@ use std::{
     io::{Cursor, Read, Seek},
 };
 use theorafile_rs::{
-    ogg_int64_t, tf_callbacks, tf_close, tf_eos, tf_hasvideo, tf_open_callbacks, tf_readvideo, tf_videoinfo, th_comment, th_pixel_fmt, th_pixel_fmt_TH_PF_444, vorbis_comment, OggTheora_File
+    ogg_int64_t, tf_callbacks, tf_close, tf_eos, tf_hasvideo, tf_open_callbacks, tf_readvideo,
+    tf_videoinfo, th_comment, th_pixel_fmt, th_pixel_fmt_TH_PF_444, vorbis_comment, OggTheora_File,
 };
+
+use crate::{utils::yuv444_to_rgb, Picture, PictureType, Tag};
 
 // this entire block for the DataSource struct (and most of my code for reading theora)
 // is taken pretty much completely from `https://github.com/xmoezzz/omvdecoder`,
@@ -102,9 +103,7 @@ unsafe extern "C" fn close_func_impl(
     }
 }
 
-pub(crate) fn parse_file<T>(
-    reader: &mut T,
-) -> Result<(String, HashMap<String, Vec<String>>), crate::Error>
+pub(crate) fn parse_file<T>(reader: &mut T) -> Result<Tag, crate::Error>
 where
     T: Read + Seek,
 {
@@ -141,7 +140,13 @@ where
         return Err(crate::Error::ParseError);
     }
 
-    let (vendor, mut tags) = unsafe { parse_tags(&mut *(*ogg_file).tcomment, &mut *(*ogg_file).vcomment)? };
+    let (vendor, comments) =
+        unsafe { parse_tags(&mut *(*ogg_file).tcomment, &mut *(*ogg_file).vcomment)? };
+    let mut tags = Tag {
+        vendor,
+        comments,
+        pictures: vec![],
+    };
 
     let has_video = unsafe { tf_hasvideo(ogg_file) };
 
@@ -210,15 +215,21 @@ where
             }
 
             let mut img_buf = Cursor::new(Vec::new());
-            img.write_to(&mut img_buf, image::ImageFormat::Png)?;
+            img.write_to(&mut img_buf, image::ImageFormat::Jpeg)?;
 
-            tags.insert(
-                "COVERART".to_string(),
-                vec![
-                    "data:image/png;base64,".to_string()
-                        + &BASE64_STANDARD.encode(img_buf.get_ref()),
-                ],
-            );
+            let block = Picture {
+                picture_type: PictureType::FrontCover, // here we need to parse ffmpeg's default strings in the title
+                media_type: "image/jpeg".to_string(),
+                description: "Cover (front)".to_string(),
+                width: img.width(),
+                height: img.height(),
+                color_depth: 24, // since we have an ImageBuffer<Rgb<u8>>,
+                // 3 channels and 8 bits per channel means 24 bits per pixel.
+                number_colors: 0,
+                data: img_buf.into_inner(),
+            };
+
+            tags.pictures.push(block);
 
             unsafe {
                 tf_close(ogg_file);
@@ -235,73 +246,50 @@ where
         }
     }
 
-    Ok((vendor, tags))
+    Ok(tags)
 }
 
-fn parse_tags(tcomment: &mut th_comment, vcomment: &mut vorbis_comment) -> Result<(String, HashMap<String, Vec<String>>), crate::Error> {
+fn parse_tags(
+    tcomment: &mut th_comment,
+    vcomment: &mut vorbis_comment,
+) -> Result<(String, HashMap<String, String>), crate::Error> {
+    let vendor = unsafe { CStr::from_ptr(vcomment.vendor).to_str()?.to_string() };
+    let mut comments = HashMap::new();
+    let mut pictures: Vec<Picture> = vec![];
 
-    /*if let Ok(mut r) = packet_reader.read_packet() {
-        while let Some(ref mut p) = r {
-            // 3 is the packet type (mesage header) and the other 6 bytes spell "vorbis" in utf8
+    // we insert theora comments first because we want vorbis comments to overwrite in the HashMap
+    // however, in case someone puts a new tag in theora without updating vorbis, this will apply.
+    let tcomment_lengths =
+        unsafe { std::slice::from_raw_parts(tcomment.comment_lengths, tcomment.comments as usize) };
+    let tcomment_ptrs =
+        unsafe { std::slice::from_raw_parts(tcomment.user_comments, tcomment.comments as usize) };
 
-            if p.data.len() >= 7 && p.data[0..7] == [3, 118, 111, 114, 98, 105, 115] {
-                let mut vorbis = Cursor::new(&mut p.data);
-                let mut comments: HashMap<String, Vec<String>> = HashMap::new();
+    for (i, ptr) in tcomment_ptrs.iter().enumerate() {
+        let comment_string = String::from_utf8(unsafe {
+            std::slice::from_raw_parts(*ptr, tcomment_lengths[i] as usize).to_vec()
+        })?;
+        let comment: Vec<&str> = comment_string.split('=').collect();
+        comments.insert(comment[0].to_string(), comment[1].to_string());
+    }
 
-                vorbis.seek(std::io::SeekFrom::Start(7))?;
-                let vendor_length = read_u32(&mut vorbis)?;
-                let mut vendor_bytes = vec![0_u8; vendor_length.try_into()?];
-                vorbis.read_exact(&mut vendor_bytes)?;
-                let vendor_string = String::from_utf8(vendor_bytes)?;
-                let list_length = read_u32(&mut vorbis)?;
+    let vcomment_lengths =
+        unsafe { std::slice::from_raw_parts(vcomment.comment_lengths, vcomment.comments as usize) };
+    let vcomment_ptrs =
+        unsafe { std::slice::from_raw_parts(vcomment.user_comments, vcomment.comments as usize) };
 
-                for _x in 0..list_length {
-                    let length = read_u32(&mut vorbis)?;
-                    let mut comment_bytes = vec![0_u8; length.try_into()?];
-                    vorbis.read_exact(&mut comment_bytes)?;
-                    let comment = String::from_utf8(comment_bytes)?;
+    for (i, ptr) in vcomment_ptrs.iter().enumerate() {
+        let comment_string = String::from_utf8(unsafe {
+            std::slice::from_raw_parts(*ptr, vcomment_lengths[i] as usize).to_vec()
+        })?;
+        let comment: Vec<&str> = comment_string.split('=').collect();
 
-                    let mut split_comment = comment.split("=");
-                    comments
-                        .entry(split_comment.next().ok_or(crate::Error::NoComments)?.into())
-                        .or_default()
-                        .push(split_comment.next().ok_or(crate::Error::NoComments)?.into());
-                }
-
-                return Ok((vendor_string, comments));
-            }
+        if comment[0] == "METADATA_BLOCK_PICTURE" {
+            // we skip this tag because we handle pictures separately.
+            pictures.push(Picture::from_raw_block(&comment[1].as_bytes().to_vec())?);
         }
 
-        // the packet reader failed. generally means the file is not a valid ogg file.
-        return Err(crate::Error::NoComments);
-    }*/
+        comments.insert(comment[0].to_string(), comment[1].to_string());
+    }
 
-    let vendor = unsafe { tcomment.vendor };
-
-    unsafe { dbg!(CStr::from_ptr(vendor).to_str()).unwrap() };
-
-    Ok(("".to_string(), HashMap::new()))
-}
-
-fn read_u32<T>(read: &mut T) -> Result<u32, crate::Error>
-where
-    T: Read,
-{
-    let mut buf = [0_u8; 4];
-    read.read_exact(&mut buf)?;
-    Ok(u32::from_le_bytes(buf))
-}
-
-fn yuv444_to_rgb(y: f32, u: f32, v: f32) -> (u8, u8, u8) {
-    let b = (1.164 * (y - 16.0) + 2.018 * (u - 128.0))
-        .clamp(0.0, 255.0)
-        .round() as u8;
-    let g = (1.164 * (y - 16.0) - 0.813 * (v - 128.0) - 0.391 * (u - 128.0))
-        .clamp(0.0, 255.0)
-        .round() as u8;
-    let r = (1.164 * (y - 16.0) + 1.596 * (v - 128.0))
-        .clamp(0.0, 255.0)
-        .round() as u8;
-
-    (r, g, b)
+    Ok((vendor, comments))
 }

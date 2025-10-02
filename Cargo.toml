@@ -1,8 +1,8 @@
 [package]
 name = "oggmeta"
-version = "0.2.0"
+version = "1.0.0"
 edition = "2021"
-description = "A crate for reader (and soon writing) ogg metadata"
+description = "A crate for reading and writing ogg metadata"
 license = "MIT"
 repository = "https://github.com/hungl6844/oggmeta"
 readme = "README.md"
@@ -11,5 +11,5 @@ readme = "README.md"
 ogg = "0.9.1"
 thiserror = "2.0.0"
 theorafile-rs = "0.1.2"
-image = "0.25.6"
+image = { version = "0.25.6", features = ["jpeg"] }
 base64 = "0.22.1"
