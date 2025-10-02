@@ -266,7 +266,7 @@ fn parse_tags(
 
     for (i, ptr) in tcomment_ptrs.iter().enumerate() {
         let comment_string = String::from_utf8(unsafe {
-            std::slice::from_raw_parts(*ptr, tcomment_lengths[i] as usize).to_vec()
+            std::slice::from_raw_parts(*(ptr as &* mut u8), tcomment_lengths[i] as usize).to_vec()
         })?;
         let comment: Vec<&str> = comment_string.split('=').collect();
         comments.insert(comment[0].to_string(), comment[1].to_string());
@@ -279,7 +279,7 @@ fn parse_tags(
 
     for (i, ptr) in vcomment_ptrs.iter().enumerate() {
         let comment_string = String::from_utf8(unsafe {
-            std::slice::from_raw_parts(*ptr, vcomment_lengths[i] as usize).to_vec()
+            std::slice::from_raw_parts(*(ptr as &* mut u8), vcomment_lengths[i] as usize).to_vec()
         })?;
         let comment: Vec<&str> = comment_string.split('=').collect();
 
