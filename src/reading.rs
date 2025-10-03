@@ -6,7 +6,7 @@ use std::{
 };
 use theorafile_rs::{
     ogg_int64_t, tf_callbacks, tf_close, tf_eos, tf_hasvideo, tf_open_callbacks, tf_readvideo,
-    tf_videoinfo, th_comment, th_pixel_fmt, th_pixel_fmt_TH_PF_444, vorbis_comment, OggTheora_File,
+    tf_videoinfo, th_pixel_fmt, th_pixel_fmt_TH_PF_444, vorbis_comment, OggTheora_File,
 };
 
 use crate::{utils::yuv444_to_rgb, Picture, PictureType, Tag};
@@ -140,8 +140,7 @@ where
         return Err(crate::Error::ParseError);
     }
 
-    let (vendor, comments) =
-        unsafe { parse_tags(&mut *(*ogg_file).tcomment, &mut *(*ogg_file).vcomment)? };
+    let (vendor, comments) = unsafe { parse_tags(&mut *(*ogg_file).vcomment)? };
     let mut tags = Tag {
         vendor,
         comments,
@@ -251,32 +250,17 @@ where
 
 #[allow(clippy::unnecessary_cast)]
 fn parse_tags(
-    tcomment: &mut th_comment,
-    vcomment: &mut vorbis_comment,
-) -> Result<(String, HashMap<String, String>), crate::Error> {
-    let vendor = unsafe { CStr::from_ptr(vcomment.vendor).to_str()?.to_string() };
-    let mut comments = HashMap::new();
+    vcomments: &mut vorbis_comment,
+) -> Result<(String, HashMap<String, Vec<String>>), crate::Error> {
+    let vendor = unsafe { CStr::from_ptr(vcomments.vendor).to_str()?.to_string() };
+    let mut comments: HashMap<String, Vec<String>> = HashMap::new();
     let mut pictures: Vec<Picture> = vec![];
 
-    // we insert theora comments first because we want vorbis comments to overwrite in the HashMap
-    // however, in case someone puts a new tag in theora without updating vorbis, this will apply.
-    let tcomment_lengths =
-        unsafe { std::slice::from_raw_parts(tcomment.comment_lengths, tcomment.comments as usize) };
-    let tcomment_ptrs =
-        unsafe { std::slice::from_raw_parts(tcomment.user_comments, tcomment.comments as usize) };
-
-    for (i, ptr) in tcomment_ptrs.iter().enumerate() {
-        let comment_string = String::from_utf8(unsafe {
-            std::slice::from_raw_parts(*ptr as *mut u8, tcomment_lengths[i] as usize).to_vec()
-        })?;
-        let comment: Vec<&str> = comment_string.split('=').collect();
-        comments.insert(comment[0].to_string(), comment[1].to_string());
-    }
-
-    let vcomment_lengths =
-        unsafe { std::slice::from_raw_parts(vcomment.comment_lengths, vcomment.comments as usize) };
+    let vcomment_lengths = unsafe {
+        std::slice::from_raw_parts(vcomments.comment_lengths, vcomments.comments as usize)
+    };
     let vcomment_ptrs =
-        unsafe { std::slice::from_raw_parts(vcomment.user_comments, vcomment.comments as usize) };
+        unsafe { std::slice::from_raw_parts(vcomments.user_comments, vcomments.comments as usize) };
 
     for (i, ptr) in vcomment_ptrs.iter().enumerate() {
         let comment_string = String::from_utf8(unsafe {
@@ -289,7 +273,11 @@ fn parse_tags(
             pictures.push(Picture::from_raw_block(&comment[1].as_bytes().to_vec())?);
         }
 
-        comments.insert(comment[0].to_string(), comment[1].to_string());
+        if let Some(c) = comments.get_mut(comment[0]) {
+            c.push(comment[1].to_string());
+        } else {
+            comments.insert(comment[0].to_string(), vec![comment[1].to_string()]);
+        }
     }
 
     Ok((vendor, comments))

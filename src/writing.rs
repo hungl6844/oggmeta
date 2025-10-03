@@ -45,17 +45,20 @@ pub(crate) fn insert_comments<W: Write, R: Read + Seek>(
             packet_data.write_all(tags.vendor.as_bytes())?;
             write_u32(
                 &mut packet_data,
-                (if is_vorbis {
-                    tags.comments.len() + tags.pictures.len()
-                } else {
-                    tags.comments.len()
-                }) as u32,
+                tags
+                    .comments
+                    .iter()
+                    .map(|c| -> u32 { c.1.len() as u32 })
+                    .sum::<u32>()
+                    + tags.pictures.len() as u32,
             )?;
 
-            for (key, val) in tags.comments.iter() {
-                let out_string = key.to_string() + "=" + val;
-                write_u32(&mut packet_data, out_string.len() as u32)?;
-                packet_data.write_all(out_string.as_bytes())?;
+            for (key, vals) in tags.comments.iter() {
+                for val in vals {
+                    let out_string = key.to_string() + "=" + val;
+                    write_u32(&mut packet_data, out_string.len() as u32)?;
+                    packet_data.write_all(out_string.as_bytes())?;
+                }
             }
 
             if is_vorbis {

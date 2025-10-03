@@ -65,7 +65,7 @@ pub enum Error {
 #[derive(Debug)]
 pub struct Tag {
     pub vendor: String,
-    pub comments: HashMap<String, String>,
+    pub comments: HashMap<String, Vec<String>>,
     pub pictures: Vec<Picture>,
 }
 
@@ -75,10 +75,10 @@ pub struct Tag {
 pub struct Picture {
     /// the type of picture: see [RFC9639](https://www.rfc-editor.org/rfc/rfc9639.html#table13)
     pub picture_type: PictureType,
-    /// the media type as specified by [RFC2046](https://www.rfc-editor.org/rfc/rfc9639.html#RFC2046)
+    /// the media type as specified by [RFC2046](https://www.rfc-editor.org/rfc/rfc9639.html#RFC2046)<br>
     /// essentially the MIME
     pub media_type: String,
-    /// description string (often this is just Cover (front) or something)
+    /// description string (often this is "Cover (front)" or something similar)
     pub description: String,
     /// width of the picture
     pub width: u32,
@@ -187,7 +187,9 @@ impl Tag {
         Ok(())
     }
 
-    /// does the same thing as [`Tag::write_to_file`], but takes a path instead.
+    /// does the same thing as [`Tag::write_to`], but takes a path instead of a writer.
+    /// opens the file in read+write mode, and expects it to already contain a valid ogg stream.
+    /// edits the vorbis comment header only.
     pub fn write_to_path<P: AsRef<Path>>(&mut self, path: P) -> Result<(), crate::Error> {
         let mut file = File::options()
             .read(true)
