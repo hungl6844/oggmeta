@@ -176,36 +176,26 @@ impl Tag {
         reading::parse_file(&mut file)
     }
 
-    /// takes a [`Read`] and a [`Write`], copies the packets over.
+    /// writes tags to a writer, expects the writer
+    /// to already contain a valid ogg stream.
     /// edits the vorbis comment header only.
-    pub fn write_to<W: Write, R: Read + Seek>(
-        &mut self,
-        read: &mut R,
-        write: &mut W,
-    ) -> Result<(), crate::Error> {
-        crate::writing::insert_comments(read, write, self)?;
+    pub fn write_to<W: Read + Write + Seek>(&mut self, mut f_in: W) -> Result<(), crate::Error> {
+        let mut buf = Vec::new();
+        crate::writing::insert_comments(&mut f_in, &mut buf, self)?;
+        f_in.rewind()?;
+        std::io::copy(&mut buf.as_slice(), &mut f_in)?;
         Ok(())
     }
 
-    /// does the same thing as [`Tag::write_to`], but takes a path instead.
-    pub fn write_to_path<P: AsRef<Path>>(&mut self, path: &P) -> Result<(), crate::Error> {
-        let mut read = File::options()
+    /// does the same thing as [`Tag::write_to_file`], but takes a path instead.
+    pub fn write_to_path<P: AsRef<Path>>(&mut self, path: P) -> Result<(), crate::Error> {
+        let mut file = File::options()
             .read(true)
-            .write(false)
+            .write(true)
             .create(false)
             .open(path)?;
 
-        let mut write = File::options()
-            .read(true)
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .open(path.as_ref().with_extension(".ogg.temp"))?;
-
-        self.write_to(&mut read, &mut write)?;
-
-        std::fs::remove_file(path)?;
-        std::fs::rename(path.as_ref().with_extension(".ogg.temp"), path)?;
+        self.write_to(&mut file)?;
 
         Ok(())
     }
