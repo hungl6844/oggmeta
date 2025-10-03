@@ -1,6 +1,6 @@
 [package]
 name = "oggmeta"
-version = "1.2.0"
+version = "1.2.1"
 edition = "2021"
 description = "A crate for reading and writing ogg metadata"
 license = "MIT"

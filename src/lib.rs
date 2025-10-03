@@ -62,7 +62,7 @@ pub enum Error {
 }
 
 /// A struct that contains all the available metadata in the file.
-#[derive(Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct Tag {
     pub vendor: String,
     pub comments: HashMap<String, Vec<String>>,
@@ -71,7 +71,7 @@ pub struct Tag {
 
 /// Implementation of FLAC picture block (is also ogg's recommended way to store album art).
 /// For an encoded description of this struct, see [RFC9639](https://www.rfc-editor.org/rfc/rfc9639.html#name-picture)
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Picture {
     /// the type of picture: see [RFC9639](https://www.rfc-editor.org/rfc/rfc9639.html#table13)
     pub picture_type: PictureType,
