@@ -1,7 +1,7 @@
 //! `oggmeta` is a crate for reading and writing audio metadata for ogg vorbis files
 
 use base64::Engine;
-use image::RgbImage;
+use image::{DynamicImage, GenericImageView, RgbImage};
 use std::collections::HashMap;
 use std::convert::AsRef;
 use std::fs::File;
@@ -213,6 +213,26 @@ impl Picture {
 
 impl From<RgbImage> for Picture {
     fn from(img: RgbImage) -> Self {
+        let mut img_buf = Cursor::new(vec![]);
+        let (width, height) = img.dimensions();
+        img.write_to(&mut img_buf, image::ImageFormat::Jpeg)
+            .unwrap();
+
+        Picture {
+            picture_type: PictureType::FrontCover,
+            media_type: "image/jpeg".to_string(),
+            description: "Cover (front)".to_string(),
+            width,
+            height,
+            color_depth: 24,
+            number_colors: 0,
+            data: img_buf.into_inner(),
+        }
+    }
+}
+
+impl From<DynamicImage> for Picture {
+    fn from(img: DynamicImage) -> Self {
         let mut img_buf = Cursor::new(vec![]);
         let (width, height) = img.dimensions();
         img.write_to(&mut img_buf, image::ImageFormat::Jpeg)
