@@ -250,3 +250,12 @@ impl From<DynamicImage> for Picture {
         }
     }
 }
+
+impl <'a> TryFrom<&'a [u8]> for Picture {
+    type Error = crate::Error;
+
+    fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
+        let dyn_img = image::load_from_memory(value)?;
+        Ok(dyn_img.into())
+    }
+}
