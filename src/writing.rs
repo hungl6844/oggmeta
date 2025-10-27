@@ -45,8 +45,7 @@ pub(crate) fn insert_comments<W: Write, R: Read + Seek>(
             packet_data.write_all(tags.vendor.as_bytes())?;
             write_u32(
                 &mut packet_data,
-                tags
-                    .comments
+                tags.comments
                     .iter()
                     .map(|c| -> u32 { c.1.len() as u32 })
                     .sum::<u32>()
