@@ -54,7 +54,7 @@ pub(crate) fn insert_comments<W: Write, R: Read + Seek>(
 
             for (key, vals) in tags.comments.iter() {
                 for val in vals {
-                    let out_string = key.to_string() + "=" + val;
+                    let out_string = key.to_string().to_uppercase() + "=" + val;
                     write_u32(&mut packet_data, out_string.len() as u32)?;
                     packet_data.write_all(out_string.as_bytes())?;
                 }

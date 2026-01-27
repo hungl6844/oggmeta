@@ -276,7 +276,10 @@ fn parse_tags(
         if let Some(c) = comments.get_mut(comment[0]) {
             c.push(comment[1].to_string());
         } else {
-            comments.insert(comment[0].to_string(), vec![comment[1].to_string()]);
+            comments.insert(
+                comment[0].to_string().to_uppercase(),
+                vec![comment[1].to_string()],
+            );
         }
     }
 

@@ -65,6 +65,8 @@ pub enum Error {
 #[derive(Clone, Debug, Default)]
 pub struct Tag {
     pub vendor: String,
+    /// A map of comments, where the key is the comment key (e.g., "ARTIST") and the value is a vector of values.
+    /// Note that the key will always be uppercase.
     pub comments: HashMap<String, Vec<String>>,
     pub pictures: Vec<Picture>,
 }
