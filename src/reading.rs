@@ -140,11 +140,11 @@ where
         return Err(crate::Error::ParseError);
     }
 
-    let (vendor, comments) = unsafe { parse_tags(&mut *(*ogg_file).vcomment)? };
+    let (vendor, comments, pictures) = unsafe { parse_tags(&mut *(*ogg_file).vcomment)? };
     let mut tags = Tag {
         vendor,
         comments,
-        pictures: vec![],
+        pictures: pictures,
     };
 
     let has_video = unsafe { tf_hasvideo(ogg_file) };
@@ -251,7 +251,7 @@ where
 #[allow(clippy::unnecessary_cast)]
 fn parse_tags(
     vcomments: &mut vorbis_comment,
-) -> Result<(String, HashMap<String, Vec<String>>), crate::Error> {
+) -> Result<(String, HashMap<String, Vec<String>>, Vec<Picture>), crate::Error> {
     let vendor = unsafe { CStr::from_ptr(vcomments.vendor).to_str()?.to_string() };
     let mut comments: HashMap<String, Vec<String>> = HashMap::new();
     let mut pictures: Vec<Picture> = vec![];
@@ -268,9 +268,11 @@ fn parse_tags(
         })?;
         let comment: Vec<&str> = comment_string.split('=').collect();
 
-        if comment[0] == "METADATA_BLOCK_PICTURE" {
+        if comment[0].to_uppercase() == "METADATA_BLOCK_PICTURE" {
             // we skip this tag because we handle pictures separately.
             pictures.push(Picture::from_raw_block(&comment[1].as_bytes().to_vec())?);
+
+            continue;
         }
 
         if let Some(c) = comments.get_mut(comment[0]) {
@@ -283,5 +285,5 @@ fn parse_tags(
         }
     }
 
-    Ok((vendor, comments))
+    Ok((vendor, comments, pictures))
 }
