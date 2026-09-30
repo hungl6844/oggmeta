@@ -51,7 +51,15 @@ impl DataSource {
         size: usize,
         nmemb: usize,
     ) -> usize {
-        let bytes_to_read = size * nmemb;
+        let bytes_to_read = match size.checked_mul(nmemb) {
+            Some(size) => size,
+            None => return 0,
+        };
+
+        if self.pos >= self.data.len() {
+            return 0;
+        }
+
         let remaining_data = &self.data[self.pos..];
         let bytes_read = std::cmp::min(remaining_data.len(), bytes_to_read);
         unsafe {
@@ -178,7 +186,7 @@ where
             // if this doesn't return 0, theres... no video? even though we've established there is a video.
             // better safe than sorry, i guess.
 
-            unsafe { tf_readvideo(ogg_file, data_blob as *mut c_char, 1) };
+            let result = unsafe { tf_readvideo(ogg_file, data_blob as *mut c_char, 1) };
 
             // need some kind of error checking here.
             // we can't run an unsafe function and just assume there's some data on the other side of the pointer.
